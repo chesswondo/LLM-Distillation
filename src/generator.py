@@ -1,4 +1,3 @@
-import argparse
 import json
 import logging
 import os
@@ -44,14 +43,14 @@ class PipelineConfig:
     max_new_tokens_question: int = 128
     max_new_tokens_answer: int = 512
     temperature_q: float = 0.7
-    temperature_a: float = 0.6
+    temperature_a: float = 0.8
     top_p: float = 0.9
     top_k: int = 50
     do_sample: bool = True
     seed: int = 42
 
     # Distillation settings
-    store_logits: bool = False
+    store_logits: bool = True
     logits_top_k: int = 50  # Number of top logits to store if store_logits is True
 
     # Internal metadata
@@ -267,7 +266,7 @@ class DatasetGenerator:
         )
 
         for i in range(self.config.questions_per_chunk):
-            # 1. Generate Question
+            # Generate Question
             q_messages = [
                 {"role": "system", "content": q_sys_prompt},
                 {"role": "user", "content": f"Context:\n{context}\n\nGenerate ONE deep question."},
@@ -283,7 +282,7 @@ class DatasetGenerator:
             if "NO_QUESTION" in question:
                 continue
 
-            # 2. Generate Answer
+            # Generate Answer
             a_messages = [
                 {"role": "system", "content": a_sys_prompt},
                 {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}\n\nAnswer:"},
@@ -307,7 +306,7 @@ class DatasetGenerator:
                 "context": context,
             }
             
-            # 3. Optionally collect logits
+            # Collect logits
             if self.config.store_logits:
                 try:
                     record["teacher_logits"] = self.teacher._collect_top_k_logits(a_prompt, answer)
@@ -318,72 +317,36 @@ class DatasetGenerator:
             records.append(record)
         return records
 
-    def run(self):
-        """Executes the full data generation pipeline."""
-        self.teacher.load()
-        full_text = self._load_pdf_text(self.config.pdf_path)
-        chunks = self._chunk_text(full_text)
-        
-        output_dir = os.path.dirname(self.config.output_path)
-        if output_dir:
+    def run(self, job_status: Dict[str, Any]):
+        """Executes the full data generation pipeline and reports progress."""
+        try:
+            job_status["status"] = "LOADING_MODEL"
+            self.teacher.load()
+            job_status["status"] = "PROCESSING"
+            full_text = self._load_pdf_text(self.config.pdf_path)
+            chunks = self._chunk_text(full_text)
+            
+            output_dir = os.path.dirname(self.config.output_path)
             os.makedirs(output_dir, exist_ok=True)
             
-        uid = 0
-        with open(self.config.output_path, "w", encoding="utf-8") as f_out:
-            for chunk in tqdm(chunks, desc="Processing Chunks"):
-                # Use a deterministic seed for each chunk for reproducibility
-                chunk_seed = self.config.seed + chunk["chunk_index"]
-                try:
+            uid = 0
+            total_chunks = len(chunks)
+            job_status["progress"] = {"current": 0, "total": total_chunks}
+
+            with open(self.config.output_path, "w", encoding="utf-8") as f_out:
+                for i, chunk in enumerate(tqdm(chunks, desc="Processing Chunks")):
+                    chunk_seed = self.config.seed + chunk["chunk_index"]
                     qna_records = self._generate_qna_for_chunk(chunk, chunk_seed)
                     for record in qna_records:
                         record["id"] = f"gen_{uid}"
                         record["meta"] = self.config.meta
                         f_out.write(json.dumps(record, ensure_ascii=False) + "\n")
                         uid += 1
-                except Exception as e:
-                    logging.error(f"Failed to process chunk {chunk['chunk_index']}: {e}")
+                    job_status["progress"]["current"] = i + 1
 
-        logging.info(f"✅ Successfully generated and saved {uid} Q&A pairs to {self.config.output_path}")
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Build a Q&A dataset from a PDF using a teacher LLM.")
-    
-    # Required arguments
-    parser.add_argument("--pdf-path", required=True, help="Path to the input PDF file.")
-    parser.add_argument("--output-path", required=True, help="Path to save the output JSONL file.")
-    
-    # Model and quantization
-    parser.add_argument("--model-name", default="meta-llama/Llama-3.1-8B-Instruct", help="Hugging Face model ID.")
-    parser.add_argument("--no-4bit", dest="load_in_4bit", action="store_false", help="Disable 4-bit quantization.")
-    parser.add_argument("--no-bf16", dest="use_bf16", action="store_false", help="Disable bfloat16 compute dtype.")
-
-    # Chunking
-    parser.add_argument("--chunk-size", type=int, default=1024, help="Chunk size in tokens.")
-    parser.add_argument("--chunk-overlap", type=int, default=128, help="Token overlap between chunks.")
-
-    # Generation control
-    parser.add_argument("--questions-per-chunk", type=int, default=1, help="Number of questions to generate per chunk.")
-    parser.add_argument("--max-new-tokens-question", type=int, default=128, help="Max new tokens for question generation.")
-    parser.add_argument("--max-new-tokens-answer", type=int, default=512, help="Max new tokens for answer generation.")
-    parser.add_argument("--temperature-q", type=float, default=0.7, help="Temperature for question generation.")
-    parser.add_argument("--temperature-a", type=float, default=0.6, help="Temperature for answer generation.")
-    parser.add_argument("--seed", type=int, default=42, help="Global random seed.")
-    
-    # Distillation
-    parser.add_argument("--store-logits", action="store_true", help="Store teacher logits for the answer.")
-    parser.add_argument("--logits-top-k", type=int, default=50, help="Value of 'k' for top-k logit storage.")
-
-    args = parser.parse_args()
-    
-    # Create config object from parsed arguments
-    config = PipelineConfig(**vars(args))
-    
-    # Initialize and run the pipeline
-    teacher_model = TeacherModel(config)
-    generator = DatasetGenerator(config, teacher_model)
-    generator.run()
-
-
-if __name__ == "__main__":
-    main()
+            job_status["status"] = "COMPLETED"
+            job_status["message"] = f"Successfully generated {uid} Q&A pairs."
+        except Exception as e:
+            logging.error(f"Generation job failed: {e}", exc_info=True)
+            job_status["status"] = "FAILED"
+            job_status["error"] = str(e)
