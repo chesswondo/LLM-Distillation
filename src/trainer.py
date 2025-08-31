@@ -94,20 +94,18 @@ class DistillationTrainer(Trainer):
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         # Extract the teacher's top-k logits and indices from the inputs
-        # These were added during data preprocessing.
         teacher_top_logits = inputs.pop("teacher_top_logits", None)
         teacher_top_indices = inputs.pop("teacher_top_indices", None)
         
-        # Standard forward pass to get student's logits
+        # Get student's logits
         outputs = model(**inputs)
         student_logits = outputs.logits
         
         # Calculate Hard Loss (Cross-Entropy)
-        # The 'labels' tensor should have -100 for tokens we want to ignore (prompt tokens)
         labels = inputs.get("labels")
         loss_ce = outputs.loss # The default loss from the model is Cross-Entropy
         
-        # 2. Calculate Soft Loss (KL-Divergence)
+        # Calculate Soft Loss (KL-Divergence)
         loss_kd = 0.0
         if teacher_top_logits is not None and teacher_top_indices is not None and self.loss_alpha < 1.0:
             # We only calculate KD loss on the answer tokens (where labels are not -100)
@@ -126,10 +124,9 @@ class DistillationTrainer(Trainer):
             probs_teacher = F.softmax(active_teacher_logits, dim=-1)
 
             # Calculate KL-Divergence loss
-            # The 'batchmean' reduction averages the loss over the batch
             loss_kd = F.kl_div(log_probs_student, probs_teacher, reduction='batchmean', log_target=False)
 
-        # 3. Combine the losses
+        # Combine the losses
         total_loss = self.loss_alpha * loss_ce + (1.0 - self.loss_alpha) * loss_kd
 
         if self.state.is_world_process_zero and self.is_in_train:
@@ -146,7 +143,6 @@ class DistillationTrainer(Trainer):
 def start_training_process(config: TrainingConfig, job_status: Dict[str, Any]):
     """The main training logic, refactored from the original main function."""
     try:
-        # --- The entire body of your original main() function goes here ---
         # Load Model and Tokenizer
         logging.info(f"Loading student model: {config.student_model_name}")
         token = os.getenv("HUGGINGFACE_HUB_TOKEN")
@@ -206,7 +202,7 @@ def start_training_process(config: TrainingConfig, job_status: Dict[str, Any]):
         def compute_metrics(eval_preds):
             preds, labels = eval_preds
 
-            # If preds are logits: [batch, seq_len, vocab_size] → take argmax
+            # If preds are logits: [batch, seq_len, vocab_size] -> take argmax
             if preds.ndim == 3:
                 preds = np.argmax(preds, axis=-1)
 
@@ -248,7 +244,7 @@ def start_training_process(config: TrainingConfig, job_status: Dict[str, Any]):
                 formatted_prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
                 prompts.append(formatted_prompt + examples['answer'][i] + tokenizer.eos_token)
 
-            # Tokenize without padding → variable length
+            # Tokenize without padding -> variable length
             model_inputs = tokenizer(
                 prompts,
                 padding=False,
@@ -259,7 +255,7 @@ def start_training_process(config: TrainingConfig, job_status: Dict[str, Any]):
             # Copy labels
             labels = [ids.copy() for ids in model_inputs["input_ids"]]
 
-            # Compute prompt lengths → where assistant starts
+            # Compute prompt lengths -> where assistant starts
             prompt_lengths = [
                 len(tokenizer.encode(p.split('<|assistant|>')[0] + '<|assistant|>'))
                 for p in prompts
@@ -318,7 +314,6 @@ def start_training_process(config: TrainingConfig, job_status: Dict[str, Any]):
         )
 
         # The data collator pads sequences to the max length in each batch
-        #data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False, pad_to_multiple_of=8)
         data_collator = DataCollatorForSeq2Seq(
             tokenizer=tokenizer,
             padding="longest",

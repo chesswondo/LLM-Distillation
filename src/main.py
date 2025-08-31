@@ -15,11 +15,11 @@ from api_models import (
 from generator import PipelineConfig, TeacherModel, DatasetGenerator
 from trainer import TrainingConfig, start_training_process
 
-# --- Globals for State Management ---
+# Globals for State Management
 JOBS: Dict[str, Dict[str, Any]] = {}
 MODEL_REGISTRY: Dict[str, Any] = {}
 
-# --- FastAPI Lifespan Manager ---
+# FastAPI Lifespan Manager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manages loading the teacher model on startup."""
@@ -36,14 +36,14 @@ async def lifespan(app: FastAPI):
     logging.info("Server shutdown: Clearing model from memory.")
     MODEL_REGISTRY.clear()
     
-# --- FastAPI App ---
+# FastAPI App
 app = FastAPI(
     title="Distillation MLOps Pipeline",
     description="An API to orchestrate dataset generation and model training.",
     lifespan=lifespan,
 )
 
-# --- Background Task Functions ---
+# Background Task Functions
 def run_generation_task(job_id: str, pdf_path: str, config_params: dict):
     """Background task for data generation."""
     job_status = JOBS[job_id]
@@ -66,7 +66,7 @@ def run_training_task(job_id: str, config_params: dict):
     config = TrainingConfig(**config_params)
     start_training_process(config, job_status)
 
-# --- API Endpoints ---
+# API Endpoints
 @app.get("/health", summary="Health Check")
 def health_check():
     model_loaded = "teacher" in MODEL_REGISTRY and MODEL_REGISTRY["teacher"].model is not None
