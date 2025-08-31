@@ -83,7 +83,8 @@ class TeacherModel:
     def load(self):
         """Loads the model and tokenizer based on the configuration."""
         logging.info(f"Loading tokenizer: {self.config.model_name}")
-        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model_name, use_fast=True)
+        token = os.getenv("HUGGINGFACE_HUB_TOKEN")
+        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model_name, use_fast=True, token=token)
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
 
@@ -108,6 +109,7 @@ class TeacherModel:
             device_map="auto",
             torch_dtype=torch_dtype,
             quantization_config=quant_config,
+            token=token
         )
         self.model.eval()
         logging.info("Model loaded successfully.")

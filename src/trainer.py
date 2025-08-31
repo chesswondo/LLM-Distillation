@@ -149,6 +149,7 @@ def start_training_process(config: TrainingConfig, job_status: Dict[str, Any]):
         # --- The entire body of your original main() function goes here ---
         # Load Model and Tokenizer
         logging.info(f"Loading student model: {config.student_model_name}")
+        token = os.getenv("HUGGINGFACE_HUB_TOKEN")
         
         quant_config = None
         if config.load_in_4bit:
@@ -164,11 +165,13 @@ def start_training_process(config: TrainingConfig, job_status: Dict[str, Any]):
             quantization_config=quant_config,
             device_map="auto",
             trust_remote_code=True,
+            token=token
         )
         
         tokenizer = AutoTokenizer.from_pretrained(
             config.student_model_name, 
-            trust_remote_code=True
+            trust_remote_code=True,
+            token=token
         )
         tokenizer.pad_token = tokenizer.eos_token
         model.config.use_cache = False # Important for gradient checkpointing

@@ -1,0 +1,17 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local data and outputs
+data/
+models/
+wandb/
+uploads/
+outputs/
+
+# IDE and git folders
+.vscode/
+.idea/
+.git/
