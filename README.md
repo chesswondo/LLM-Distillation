@@ -1,6 +1,8 @@
 # LLM Distillation Pipeline
 
-This test project provides a complete, end-to-end pipeline for creating specialized, lightweight language models using knowledge distillation. It features a FastAPI-based job server, containerized with Docker.
+This project is an attempt to experiment with distilling large language models on a specific topic. At the moment it is a very rough version, which will be further developed.
+
+It currently provides a complete, end-to-end pipeline for creating specialized, lightweight language models using knowledge distillation. It features a FastAPI-based job server, containerized with Docker.
 
 ### Features
 - PDF Data Processing: Ingests raw text from PDF documents to use as a knowledge base.
