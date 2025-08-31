@@ -1,0 +1,22 @@
+# Core web framework
+fastapi
+uvicorn[standard]
+python-multipart
+
+# Data and ML Libraries
+pypdf
+datasets
+evaluate
+bert_score
+rouge_score
+
+# PyTorch with CUDA 12.8 - CRITICAL for GPU support
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.8.0+cu128
+torchvision==0.23.0+cu128
+
+# Hugging Face and efficiency libraries
+transformers
+peft
+bitsandbytes
+accelerate
